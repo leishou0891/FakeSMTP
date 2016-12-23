@@ -37,7 +37,7 @@ public final class MailSaver extends Observable {
 	// This can be a static variable since it is Thread Safe
 	private static final Pattern SUBJECT_PATTERN = Pattern.compile("^Subject: (.*)$");
 
-	private final SimpleDateFormat dateFormat = new SimpleDateFormat("ddMMyyhhmmssSSS");
+	private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMddhhmmssSSS");
 
 	/**
 	 * Saves incoming email in file system and notifies observers.
@@ -74,7 +74,7 @@ public final class MailSaver extends Observable {
 		model.setEmailStr(mailContent);
 
 		synchronized (getLock()) {
-			String filePath = saveEmailToFile(mailContent);
+			String filePath = saveEmailToFile(to, mailContent);
 
 			model.setReceivedDate(new Date());
 			model.setFilePath(filePath);
@@ -147,6 +147,39 @@ public final class MailSaver extends Observable {
 		}
 		return sb.toString();
 	}
+
+	private String saveEmailToFile(String to, String mailContent) {
+		if (ArgsHandler.INSTANCE.memoryModeEnabled()) {
+			return null;
+		}
+		String filePath = String.format("%s%s%s", UIModel.INSTANCE.getSavePath(), File.separator,
+				to + "_" + dateFormat.format(new Date()));
+
+		// Create file
+		int i = 0;
+		File file = null;
+		while (file == null || file.exists()) {
+			String iStr;
+			if (i++ > 0) {
+				iStr = Integer.toString(i);
+			} else {
+				iStr = "";
+			}
+			filePath = filePath + iStr + Configuration.INSTANCE.get("emails.suffix");
+			file = new File(filePath);
+		}
+
+		// Copy String to file
+		try {
+			FileUtils.writeStringToFile(file, mailContent);
+		} catch (IOException e) {
+			// If we can't save file, we display the error in the SMTP logs
+			Logger smtpLogger = LoggerFactory.getLogger(org.subethamail.smtp.server.Session.class);
+			smtpLogger.error("Error: Can't save email: {}", e.getMessage());
+		}
+		return file.getAbsolutePath();
+	}
+
 
 	/**
 	 * Saves the content of the email passed in parameters in a file.
